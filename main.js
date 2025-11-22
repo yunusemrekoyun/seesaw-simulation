@@ -6,7 +6,10 @@ const nextWeightSpan = document.getElementById("next-weight-value");
 const pauseButton = document.getElementById("pause-button");
 const pauseText = document.getElementById("pause-text");
 const infoPanel = document.getElementById("info-panel");
-
+const noteSteps = {
+  left: 0,
+  right: 0,
+}; //to keep track of the notes that have been played
 const weights = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
 const colors = [
   "red",
@@ -21,9 +24,7 @@ const colors = [
   "black",
 ];
 const sizes = [18, 22, 26, 30, 34, 38, 42, 46, 50, 55];
-
 const STATE_KEY = "seesawState";
-
 let currentAngle = 0;
 let angleAnimationId = null;
 let gameStarted = false;
@@ -31,7 +32,44 @@ let nextWeightValue = null;
 let isPaused = false;
 let logs = [];
 let placedWeights = [];
+let audioCtx = null;
+const SEMITONE = Math.pow(2, 1 / 12); //to go up each semitone, multiplying by this value
+const SCALE_STEPS = [0, 2, 4, 5, 7, 9, 11, 12]; // do–re–mi–fa–sol–la–si–do
+let lastSide = null;
+function getAudioCtx() {
+  if (!audioCtx) {
+    const AC = window.AudioContext;
+    audioCtx = new AC();
+  }
+  return audioCtx;
+}
 
+function playHit(side) {
+  if (lastSide !== side) {
+    lastSide = side;
+    noteSteps[side] = 0;
+  } else {
+    noteSteps[side] = (noteSteps[side] + 1) % SCALE_STEPS.length;
+  }
+
+  const stepIndex = noteSteps[side];
+  const semitones = SCALE_STEPS[stepIndex];
+
+  const ctx = getAudioCtx();
+  const tone = ctx.createOscillator();
+  const fadeOut = ctx.createGain(); //for fade out effect
+  const baseFrequency = 261.63; // this is the base frequency for "do"
+  const frequency = baseFrequency * Math.pow(SEMITONE, semitones);
+  tone.type = "sine";
+  tone.frequency.value = frequency;
+  const now = ctx.currentTime;
+  fadeOut.gain.setValueAtTime(0.3, now);
+  fadeOut.gain.exponentialRampToValueAtTime(0.001, now + 0.25);
+  tone.connect(fadeOut);
+  fadeOut.connect(ctx.destination);
+  tone.start(now);
+  tone.stop(now + 0.25);
+}
 function load() {
   const raw = localStorage.getItem("seesawLogs");
   if (!raw) return;
@@ -57,27 +95,21 @@ function getLogs() {
     infoPanel.textContent = "No drops recorded yet.";
     return;
   }
-
   logs.forEach((log) => {
     const row = document.createElement("div");
     row.className = "log-row";
-
     const side = document.createElement("span");
     side.className = "log-side";
     side.textContent = log.side;
-
     const dist = document.createElement("span");
     dist.className = "log-distance";
     dist.textContent = `${log.distance}px from center`;
-
     const weight = document.createElement("span");
     weight.className = "log-weight";
     weight.textContent = `${log.weight} kg`;
-
     row.appendChild(side);
     row.appendChild(dist);
     row.appendChild(weight);
-
     infoPanel.appendChild(row);
   });
 }
@@ -273,7 +305,8 @@ stand.addEventListener("click", (event) => {
 
   const signedDist = localX;
   const torqueValue = w * Math.abs(signedDist);
-
+  const sideName = signedDist < 0 ? "left" : "right";
+  playHit(sideName);
   if (signedDist < 0) {
     leftWeight += w;
     leftWeightSpan.textContent = leftWeight;

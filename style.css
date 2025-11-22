@@ -48,7 +48,7 @@ body {
   left: 12px;
   right: 12px;
   display: flex;
-  justify-content: space-between;
+  gap: 8px;
   align-items: center;
   z-index: 5;
 }
@@ -80,7 +80,17 @@ body {
   background: #ffffff92;
   transition: 0.2s ease;
 }
+#mute-button {
+  padding: 6px 12px;
+  font-size: 18px;
+  cursor: pointer;
+  border: none;
+  border-radius: 6px;
+  background: #ffffff92;
+  transition: 0.2s ease;
+}
 #next-weight {
+  margin-left: auto;
   background: #ffffff92;
   padding: 6px 12px;
   border-radius: 6px;
