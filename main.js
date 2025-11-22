@@ -1,8 +1,11 @@
 const startButton = document.getElementById("start-button");
 const gameScene = document.getElementById("game-scene");
-const dropArea = document.getElementById("drop");
 const stand = document.getElementById("stand");
 const angleSpan = document.getElementById("angle");
+const nextWeightSpan = document.getElementById("next-weight-value");
+const pauseButton = document.getElementById("pause-button");
+const pauseText = document.getElementById("pause-text");
+const infoPanel = document.getElementById("info-panel");
 
 const weights = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
 const colors = [
@@ -19,20 +22,132 @@ const colors = [
 ];
 const sizes = [18, 22, 26, 30, 34, 38, 42, 46, 50, 55];
 
+const STATE_KEY = "seesawState";
+
 let currentAngle = 0;
 let angleAnimationId = null;
 let gameStarted = false;
+let nextWeightValue = null;
+let isPaused = false;
+let logs = [];
+let placedWeights = [];
 
-startButton.addEventListener("click", () => {
-  if (!gameStarted) {
-    gameScene.style.display = "block";
-    gameScene.style.pointerEvents = "auto";
-    startButton.textContent = "Reset";
-    gameStarted = true;
-  } else {
-    resetGame();
+function load() {
+  const raw = localStorage.getItem("seesawLogs");
+  if (!raw) return;
+  try {
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) {
+      logs = parsed;
+      getLogs();
+    }
+  } catch {
+    logs = [];
+    getLogs();
   }
-});
+}
+function save() {
+  localStorage.setItem("seesawLogs", JSON.stringify(logs));
+}
+function getLogs() {
+  if (!infoPanel) return;
+  infoPanel.innerHTML = "";
+
+  if (logs.length === 0) {
+    infoPanel.textContent = "No drops recorded yet.";
+    return;
+  }
+
+  logs.forEach((log) => {
+    const row = document.createElement("div");
+    row.className = "log-row";
+
+    const side = document.createElement("span");
+    side.className = "log-side";
+    side.textContent = log.side;
+
+    const dist = document.createElement("span");
+    dist.className = "log-distance";
+    dist.textContent = `${log.distance}px from center`;
+
+    const weight = document.createElement("span");
+    weight.className = "log-weight";
+    weight.textContent = `${log.weight} kg`;
+
+    row.appendChild(side);
+    row.appendChild(dist);
+    row.appendChild(weight);
+
+    infoPanel.appendChild(row);
+  });
+}
+
+function addLog(weight, signedDist) {
+  const side = signedDist < 0 ? "Left" : signedDist > 0 ? "Right" : "Center";
+
+  const entry = {
+    side,
+    distance: Math.abs(Math.round(signedDist)),
+    weight,
+  };
+  logs.push(entry);
+  if (logs.length > 50) {
+    logs.shift();
+  }
+  save();
+  getLogs();
+}
+
+function clearLogs() {
+  logs = [];
+  localStorage.removeItem("seesawLogs");
+  getLogs();
+}
+function saveState() {
+  const payload = {
+    gameStarted,
+    leftWeight,
+    rightWeight,
+    leftTorque,
+    rightTorque,
+    nextWeightValue,
+    isPaused,
+    placedWeights,
+  };
+  try {
+    localStorage.setItem(STATE_KEY, JSON.stringify(payload));
+  } catch {}
+}
+
+function recreateWeights() {
+  stand.querySelectorAll(".weight-object").forEach((el) => el.remove());
+
+  const standWidth = stand.clientWidth;
+  const standHeight = stand.clientHeight;
+
+  placedWeights.forEach((item) => {
+    const w = item.weight;
+    const signedDist = item.signedDist;
+    const sizeIndex = Math.max(0, Math.min(weights.length - 1, w - 1));
+    const sz = sizes[sizeIndex];
+    const col = colors[sizeIndex];
+
+    const element = document.createElement("div");
+    element.classList.add("weight-object");
+    element.style.width = `${sz}px`;
+    element.style.height = `${sz}px`;
+    element.style.backgroundColor = col;
+    element.dataset.weight = w;
+    element.textContent = w;
+
+    const xForCss = standWidth / 2 + signedDist;
+    element.style.left = `${xForCss - sz / 2}px`;
+    const endY = (standHeight - sz) / 2;
+    element.style.top = `${endY}px`;
+
+    stand.appendChild(element);
+  });
+}
 
 const leftWeightSpan = document.getElementById("left-weight");
 const rightWeightSpan = document.getElementById("right-weight");
@@ -44,14 +159,106 @@ let rightWeight = 0;
 let leftTorque = 0;
 let rightTorque = 0;
 
-dropArea.addEventListener("click", (event) => {
-  const xLocal = event.offsetX;
-  const yLocal = event.offsetY;
+function loadState() {
+  const raw = localStorage.getItem(STATE_KEY);
+  if (!raw) return;
 
+  try {
+    const state = JSON.parse(raw);
+    if (!state || typeof state !== "object") return;
+
+    gameStarted = !!state.gameStarted;
+    leftWeight = state.leftWeight || 0;
+    rightWeight = state.rightWeight || 0;
+    leftTorque = state.leftTorque || 0;
+    rightTorque = state.rightTorque || 0;
+    nextWeightValue = state.nextWeightValue ?? null;
+    isPaused = !!state.isPaused;
+    placedWeights = Array.isArray(state.placedWeights)
+      ? state.placedWeights
+      : [];
+
+    const diff = rightTorque - leftTorque;
+    currentAngle = Math.max(-30, Math.min(30, diff / 10));
+
+    leftWeightSpan.textContent = leftWeight;
+    rightWeightSpan.textContent = rightWeight;
+    leftTorqueSpan.textContent = Math.round(leftTorque);
+    rightTorqueSpan.textContent = Math.round(rightTorque);
+    angleSpan.textContent = currentAngle.toFixed(2);
+
+    if (nextWeightValue != null) {
+      nextWeightSpan.textContent = nextWeightValue;
+    }
+
+    if (gameStarted) {
+      gameScene.style.display = "block";
+      gameScene.style.pointerEvents = "auto";
+      startButton.textContent = "Reset";
+      stand.style.transform = `translateX(-50%) rotate(${currentAngle}deg)`;
+      recreateWeights();
+    }
+
+    if (isPaused) {
+      pauseButton.textContent = "▶️";
+      pauseText.style.display = "flex";
+    } else {
+      pauseButton.textContent = "⏸️";
+      pauseText.style.display = "none";
+    }
+  } catch {}
+}
+load();
+loadState();
+
+pauseButton.addEventListener("click", pause);
+startButton.addEventListener("click", () => {
+  if (!gameStarted) {
+    gameScene.style.display = "block";
+    gameScene.style.pointerEvents = "auto";
+    startButton.textContent = "Reset";
+    gameStarted = true;
+    nextWeight();
+    saveState();
+  } else {
+    resetGame();
+  }
+});
+
+function pause() {
+  isPaused = !isPaused;
+
+  if (isPaused) {
+    pauseButton.textContent = "▶️";
+    pauseText.style.display = "flex";
+  } else {
+    pauseButton.textContent = "⏸️";
+    pauseText.style.display = "none";
+  }
+  saveState();
+}
+
+function nextWeight() {
   const idx = Math.floor(Math.random() * weights.length);
-  const w = weights[idx];
-  const col = colors[idx];
-  const sz = sizes[idx];
+  nextWeightValue = weights[idx];
+  nextWeightSpan.textContent = nextWeightValue ?? "-";
+}
+stand.addEventListener("click", (event) => {
+  if (!gameStarted || isPaused) return;
+
+  const rect = stand.getBoundingClientRect();
+  const standWidth = stand.clientWidth;
+  const cx = rect.left + rect.width / 2;
+  const cy = rect.top + rect.height / 2;
+  const dx = event.clientX - cx;
+  const dy = event.clientY - cy;
+  const angleRad = (currentAngle * Math.PI) / 180;
+  const localX = dx * Math.cos(angleRad) + dy * Math.sin(angleRad);
+  const xForCss = standWidth / 2 + localX;
+  const w = nextWeightValue;
+  const sizeIndex = Math.max(0, Math.min(weights.length - 1, w - 1));
+  const col = colors[sizeIndex];
+  const sz = sizes[sizeIndex];
 
   const item = document.createElement("div");
   item.classList.add("weight-object");
@@ -60,16 +267,11 @@ dropArea.addEventListener("click", (event) => {
   item.style.backgroundColor = col;
   item.dataset.weight = w;
   item.textContent = w;
-  item.style.left = `${xLocal}px`;
-  item.style.top = `${yLocal}px`;
+  item.style.left = `${xForCss - sz / 2}px`;
 
-  dropArea.appendChild(item);
-  animateFall(item, yLocal, sz);
+  stand.appendChild(item);
 
-  const areaWidth = dropArea.clientWidth;
-  const pivotPos = areaWidth / 2; 
-  const signedDist = xLocal - pivotPos;
-
+  const signedDist = localX;
   const torqueValue = w * Math.abs(signedDist);
 
   if (signedDist < 0) {
@@ -86,27 +288,38 @@ dropArea.addEventListener("click", (event) => {
     rightTorqueSpan.textContent = Math.round(rightTorque);
   }
 
-  updateAngle();
+  placedWeights.push({ weight: w, signedDist });
+  addLog(w, signedDist);
+  saveState();
+
+  animateFall(item, sz, () => {
+    updateAngle();
+    nextWeight();
+    saveState();
+  });
 });
 
-function animateFall(element, startY, size) {
-  const maxY = dropArea.clientHeight - size / 2;
-  let currentY = Math.min(startY, maxY);
+function animateFall(element, size, onLanding) {
+  const standHeight = stand.clientHeight;
+  const endY = (standHeight - size) / 2;
+  let currentY = endY - 180;
   const speed = 12;
 
   function fall() {
-    currentY += speed;
-
-    if (currentY >= maxY) {
-      currentY = maxY;
-      element.style.top = `${currentY}px`;
+    if (isPaused) {
+      requestAnimationFrame(fall);
       return;
     }
-
+    currentY += speed;
+    if (currentY >= endY) {
+      currentY = endY;
+      element.style.top = `${currentY}px`;
+      if (typeof onLanding === "function") onLanding();
+      return;
+    }
     element.style.top = `${currentY}px`;
     requestAnimationFrame(fall);
   }
-
   requestAnimationFrame(fall);
 }
 
@@ -123,13 +336,17 @@ function updateAngle() {
   if (angleAnimationId) cancelAnimationFrame(angleAnimationId);
 
   function animate(now) {
+    if (isPaused) {
+      angleAnimationId = requestAnimationFrame(animate);
+      return;
+    }
     const t = Math.min(1, (now - startTime) / duration);
     const eased = t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t;
 
     currentAngle = startAngle + (calcAngle - startAngle) * eased;
 
     stand.style.transform = `translateX(-50%) rotate(${currentAngle}deg)`;
-    angleSpan.textContent = Math.round(currentAngle);
+    angleSpan.textContent = currentAngle.toFixed(2);
 
     if (t < 1) {
       angleAnimationId = requestAnimationFrame(animate);
@@ -138,12 +355,12 @@ function updateAngle() {
 
   angleAnimationId = requestAnimationFrame(animate);
 }
-
 function resetGame() {
-  dropArea.querySelectorAll(".weight-object").forEach((el) => el.remove());
+  stand.querySelectorAll(".weight-object").forEach((el) => el.remove());
 
   leftWeight = rightWeight = 0;
   leftTorque = rightTorque = 0;
+  placedWeights = [];
 
   leftWeightSpan.textContent = "0";
   rightWeightSpan.textContent = "0";
@@ -160,5 +377,11 @@ function resetGame() {
   gameScene.style.pointerEvents = "none";
 
   startButton.textContent = "Start";
+  isPaused = false;
+  pauseButton.textContent = "⏸️";
+  pauseText.style.display = "none";
   gameStarted = false;
+
+  clearLogs();
+  localStorage.removeItem(STATE_KEY);
 }

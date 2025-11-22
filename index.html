@@ -42,14 +42,18 @@
     </div>
 
     <div id="game-scene">
+      <div class="hud">
+        <button id="pause-button">⏸️</button>
+        <div id="pause-text">Game Paused</div>
+        <div id="next-weight">
+          Next Weight: <span id="next-weight-value">-</span> kg
+        </div>
+      </div>
       <div id="ground"></div>
       <div id="stand"></div>
       <div id="triangle"></div>
-      <div id="drop">
-        <div id="left-drop"></div>
-        <div id="right-drop"></div>
-      </div>
     </div>
+    <div id="info-panel"></div>
 
     <script src="main.js"></script>
   </body>
