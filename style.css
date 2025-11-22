@@ -12,6 +12,7 @@ body {
   padding-top: 30px;
   min-height: 100vh;
   flex-direction: column;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
 }
 
 .container {
@@ -19,6 +20,7 @@ body {
   padding: 20px;
   border-radius: 10px;
   box-shadow: 0 4px 8px rgba(0, 0, 0, 0.35);
+  justify-items: center;
 }
 
 .weight-object {
@@ -117,6 +119,7 @@ body {
   width: 100%;
   background: #b14cff;
   color: #fff;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.35);
   transition: 0.2s ease;
 }
 
@@ -192,7 +195,6 @@ body {
   border-radius: 8px;
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
   font-size: 12px;
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
   max-height: 140px;
   overflow-y: auto;
 }

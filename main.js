@@ -6,6 +6,8 @@ const nextWeightSpan = document.getElementById("next-weight-value");
 const pauseButton = document.getElementById("pause-button");
 const pauseText = document.getElementById("pause-text");
 const infoPanel = document.getElementById("info-panel");
+const muteButton = document.getElementById("mute-button");
+
 const noteSteps = {
   left: 0,
   right: 0,
@@ -33,6 +35,8 @@ let isPaused = false;
 let logs = [];
 let placedWeights = [];
 let audioCtx = null;
+let muted = false;
+
 const SEMITONE = Math.pow(2, 1 / 12); //to go up each semitone, multiplying by this value
 const SCALE_STEPS = [0, 2, 4, 5, 7, 9, 11, 12]; // do–re–mi–fa–sol–la–si–do
 let lastSide = null;
@@ -43,7 +47,17 @@ function getAudioCtx() {
   }
   return audioCtx;
 }
+function playSfx(file) {
+  if (muted) return;
+  const audio = new Audio(file);
+  audio.volume = 0.5;
+  audio.play().catch(() => {});
+}
 
+muteButton.addEventListener("click", () => {
+  muted = !muted;
+  muteButton.textContent = muted ? "🔇" : "🔈";
+});
 function playHit(side) {
   if (lastSide !== side) {
     lastSide = side;
@@ -51,6 +65,7 @@ function playHit(side) {
   } else {
     noteSteps[side] = (noteSteps[side] + 1) % SCALE_STEPS.length;
   }
+  if (muted) return;
 
   const stepIndex = noteSteps[side];
   const semitones = SCALE_STEPS[stepIndex];
@@ -246,6 +261,7 @@ loadState();
 pauseButton.addEventListener("click", pause);
 startButton.addEventListener("click", () => {
   if (!gameStarted) {
+    playSfx("sfx/start.mp3");
     gameScene.style.display = "block";
     gameScene.style.pointerEvents = "auto";
     startButton.textContent = "Reset";
@@ -253,13 +269,14 @@ startButton.addEventListener("click", () => {
     nextWeight();
     saveState();
   } else {
+    playSfx("sfx/reset.mp3");
     resetGame();
   }
 });
 
 function pause() {
   isPaused = !isPaused;
-
+  playSfx("sfx/pause.mp3");
   if (isPaused) {
     pauseButton.textContent = "▶️";
     pauseText.style.display = "flex";
@@ -363,7 +380,7 @@ function updateAngle() {
   );
 
   const startAngle = currentAngle;
-  const duration = 300;
+  const duration = 500;
   const startTime = performance.now();
 
   if (angleAnimationId) cancelAnimationFrame(angleAnimationId);
