@@ -7,6 +7,18 @@ const pauseButton = document.getElementById("pause-button");
 const pauseText = document.getElementById("pause-text");
 const infoPanel = document.getElementById("info-panel");
 const muteButton = document.getElementById("mute-button");
+const leftWeightSpan = document.getElementById("left-weight");
+const rightWeightSpan = document.getElementById("right-weight");
+const leftTorqueSpan = document.getElementById("left-torque");
+const rightTorqueSpan = document.getElementById("right-torque");
+const torquePreview = document.getElementById("torque-preview");
+
+muteButton.addEventListener("click", mute);
+pauseButton.addEventListener("click", pause);
+startButton.addEventListener("click", startGame);
+stand.addEventListener("click", handleClickOnStand);
+stand.addEventListener("mousemove", showTorquePreview);
+stand.addEventListener("mouseleave", hideTorquePreview);
 
 const noteSteps = {
   left: 0,
@@ -27,6 +39,9 @@ const colors = [
 ];
 const sizes = [18, 22, 26, 30, 34, 38, 42, 46, 50, 55];
 const STATE_KEY = "seesawState";
+const SEMITONE = Math.pow(2, 1 / 12); //to go up each semitone, multiplying by this value
+const SCALE_STEPS = [0, 2, 4, 5, 7, 9, 11, 12]; // do–re–mi–fa–sol–la–si–do
+
 let currentAngle = 0;
 let angleAnimationId = null;
 let gameStarted = false;
@@ -36,10 +51,16 @@ let logs = [];
 let placedWeights = [];
 let audioCtx = null;
 let muted = false;
-
-const SEMITONE = Math.pow(2, 1 / 12); //to go up each semitone, multiplying by this value
-const SCALE_STEPS = [0, 2, 4, 5, 7, 9, 11, 12]; // do–re–mi–fa–sol–la–si–do
 let lastSide = null;
+let leftWeight = 0;
+let rightWeight = 0;
+let leftTorque = 0;
+let rightTorque = 0;
+
+function mute() {
+  muted = !muted;
+  muteButton.textContent = muted ? "🔇" : "🔈";
+}
 function getAudioCtx() {
   if (!audioCtx) {
     const AC = window.AudioContext;
@@ -53,12 +74,8 @@ function playSfx(file) {
   audio.volume = 0.5;
   audio.play().catch(() => {});
 }
-
-muteButton.addEventListener("click", () => {
-  muted = !muted;
-  muteButton.textContent = muted ? "🔇" : "🔈";
-});
 function playHit(side) {
+  //note: this function implemented from this sources: https://ui.dev/web-audio-api?utm , https://youtu.be/nWF6gmcatNQ?list=PLMPgoZdlPumc_llMSynz5BqT8dTwr5sZ2 , https://musiclab.chromeexperiments.com/Oscillators
   if (lastSide !== side) {
     lastSide = side;
     noteSteps[side] = 0;
@@ -84,6 +101,20 @@ function playHit(side) {
   fadeOut.connect(ctx.destination);
   tone.start(now);
   tone.stop(now + 0.25);
+}
+function startGame() {
+  if (!gameStarted) {
+    playSfx("sfx/start.mp3");
+    gameScene.style.display = "block";
+    gameScene.style.pointerEvents = "auto";
+    startButton.textContent = "Reset";
+    gameStarted = true;
+    nextWeight();
+    saveState();
+  } else {
+    playSfx("sfx/reset.mp3");
+    resetGame();
+  }
 }
 function load() {
   const raw = localStorage.getItem("seesawLogs");
@@ -128,7 +159,6 @@ function getLogs() {
     infoPanel.appendChild(row);
   });
 }
-
 function addLog(weight, signedDist) {
   const side = signedDist < 0 ? "Left" : signedDist > 0 ? "Right" : "Center";
 
@@ -144,7 +174,6 @@ function addLog(weight, signedDist) {
   save();
   getLogs();
 }
-
 function clearLogs() {
   logs = [];
   localStorage.removeItem("seesawLogs");
@@ -165,7 +194,6 @@ function saveState() {
     localStorage.setItem(STATE_KEY, JSON.stringify(payload));
   } catch {}
 }
-
 function recreateWeights() {
   stand.querySelectorAll(".weight-object").forEach((el) => el.remove());
 
@@ -195,17 +223,6 @@ function recreateWeights() {
     stand.appendChild(element);
   });
 }
-
-const leftWeightSpan = document.getElementById("left-weight");
-const rightWeightSpan = document.getElementById("right-weight");
-const leftTorqueSpan = document.getElementById("left-torque");
-const rightTorqueSpan = document.getElementById("right-torque");
-
-let leftWeight = 0;
-let rightWeight = 0;
-let leftTorque = 0;
-let rightTorque = 0;
-
 function loadState() {
   const raw = localStorage.getItem(STATE_KEY);
   if (!raw) return;
@@ -257,23 +274,6 @@ function loadState() {
 }
 load();
 loadState();
-
-pauseButton.addEventListener("click", pause);
-startButton.addEventListener("click", () => {
-  if (!gameStarted) {
-    playSfx("sfx/start.mp3");
-    gameScene.style.display = "block";
-    gameScene.style.pointerEvents = "auto";
-    startButton.textContent = "Reset";
-    gameStarted = true;
-    nextWeight();
-    saveState();
-  } else {
-    playSfx("sfx/reset.mp3");
-    resetGame();
-  }
-});
-
 function pause() {
   isPaused = !isPaused;
   playSfx("sfx/pause.mp3");
@@ -286,69 +286,11 @@ function pause() {
   }
   saveState();
 }
-
 function nextWeight() {
   const idx = Math.floor(Math.random() * weights.length);
   nextWeightValue = weights[idx];
   nextWeightSpan.textContent = nextWeightValue ?? "-";
 }
-stand.addEventListener("click", (event) => {
-  if (!gameStarted || isPaused) return;
-
-  const rect = stand.getBoundingClientRect();
-  const standWidth = stand.clientWidth;
-  const cx = rect.left + rect.width / 2;
-  const cy = rect.top + rect.height / 2;
-  const dx = event.clientX - cx;
-  const dy = event.clientY - cy;
-  const angleRad = (currentAngle * Math.PI) / 180;
-  const localX = dx * Math.cos(angleRad) + dy * Math.sin(angleRad);
-  const xForCss = standWidth / 2 + localX;
-  const w = nextWeightValue;
-  const sizeIndex = Math.max(0, Math.min(weights.length - 1, w - 1));
-  const col = colors[sizeIndex];
-  const sz = sizes[sizeIndex];
-
-  const item = document.createElement("div");
-  item.classList.add("weight-object");
-  item.style.width = `${sz}px`;
-  item.style.height = `${sz}px`;
-  item.style.backgroundColor = col;
-  item.dataset.weight = w;
-  item.textContent = w;
-  item.style.left = `${xForCss - sz / 2}px`;
-
-  stand.appendChild(item);
-
-  const signedDist = localX;
-  const torqueValue = w * Math.abs(signedDist);
-  const sideName = signedDist < 0 ? "left" : "right";
-  playHit(sideName);
-  if (signedDist < 0) {
-    leftWeight += w;
-    leftWeightSpan.textContent = leftWeight;
-
-    leftTorque += torqueValue;
-    leftTorqueSpan.textContent = Math.round(leftTorque);
-  } else if (signedDist > 0) {
-    rightWeight += w;
-    rightWeightSpan.textContent = rightWeight;
-
-    rightTorque += torqueValue;
-    rightTorqueSpan.textContent = Math.round(rightTorque);
-  }
-
-  placedWeights.push({ weight: w, signedDist });
-  addLog(w, signedDist);
-  saveState();
-
-  animateFall(item, sz, () => {
-    updateAngle();
-    nextWeight();
-    saveState();
-  });
-});
-
 function animateFall(element, size, onLanding) {
   const standHeight = stand.clientHeight;
   const endY = (standHeight - size) / 2;
@@ -372,7 +314,6 @@ function animateFall(element, size, onLanding) {
   }
   requestAnimationFrame(fall);
 }
-
 function updateAngle() {
   const calcAngle = Math.max(
     -30,
@@ -434,4 +375,111 @@ function resetGame() {
 
   clearLogs();
   localStorage.removeItem(STATE_KEY);
+}
+function handleClickOnStand(event) {
+  if (!gameStarted || isPaused) return;
+
+  const clickData = clickPositionOnStand(event);
+  const newItem = createWeight(clickData);
+
+  stand.appendChild(newItem);
+
+  updatePhysics(clickData);
+
+  placedWeights.push({
+    weight: nextWeightValue,
+    signedDist: clickData.localX,
+  });
+
+  addLog(nextWeightValue, clickData.localX);
+  saveState();
+
+  animateFall(newItem, clickData.size, () => {
+    updateAngle();
+    nextWeight();
+    saveState();
+  });
+}
+function clickPositionOnStand(event) {
+  const rect = stand.getBoundingClientRect();
+  const standWidth = stand.clientWidth;
+
+  const cx = rect.left + rect.width / 2;
+  const cy = rect.top + rect.height / 2;
+
+  const dx = event.clientX - cx;
+  const dy = event.clientY - cy;
+
+  const angleRad = (currentAngle * Math.PI) / 180;
+  const localX = dx * Math.cos(angleRad) + dy * Math.sin(angleRad);
+  const xForCss = standWidth / 2 + localX;
+
+  const w = nextWeightValue;
+  const sizeIndex = Math.max(0, Math.min(weights.length - 1, w - 1));
+
+  return {
+    standWidth,
+    localX,
+    xForCss,
+    weight: w,
+    size: sizes[sizeIndex],
+    color: colors[sizeIndex],
+  };
+}
+function createWeight(data) {
+  const el = document.createElement("div");
+  el.classList.add("weight-object");
+
+  el.style.width = `${data.size}px`;
+  el.style.height = `${data.size}px`;
+  el.style.backgroundColor = data.color;
+
+  el.textContent = data.weight;
+  el.dataset.weight = data.weight;
+
+  el.style.left = `${data.xForCss - data.size / 2}px`;
+
+  return el;
+}
+function updatePhysics({ weight, localX }) {
+  const torque = weight * Math.abs(localX);
+
+  if (localX < 0) {
+    leftWeight += weight;
+    leftTorque += torque;
+
+    leftWeightSpan.textContent = leftWeight;
+    leftTorqueSpan.textContent = Math.round(leftTorque);
+
+    playHit("left");
+  } else {
+    rightWeight += weight;
+    rightTorque += torque;
+
+    rightWeightSpan.textContent = rightWeight;
+    rightTorqueSpan.textContent = Math.round(rightTorque);
+
+    playHit("right");
+  }
+}
+function showTorquePreview(event) {
+  if (!gameStarted || isPaused) return;
+  const hoverData = clickPositionOnStand(event);
+  const { localX, weight } = hoverData;
+
+  const previewTorque = weight * Math.abs(localX);
+
+  const position = localX < 0 ? "left" : localX > 0 ? "right" : "center";
+  torquePreview.textContent = `${position} torque (preview): ${Math.round(
+    previewTorque
+  )} N`;
+  torquePreview.style.position = "fixed";
+  torquePreview.style.display = "block";
+  torquePreview.style.left = event.clientX + 15 + "px";
+  torquePreview.style.top = event.clientY - 10 + "px";
+}
+function hideTorquePreview() {
+  torquePreview.style.display = "none";
+
+  torquePreview.textContent = "";
 }

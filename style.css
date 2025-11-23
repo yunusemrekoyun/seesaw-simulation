@@ -32,6 +32,7 @@ body {
   font-size: 12px;
   font-weight: 600;
   color: white;
+  box-shadow: #66666657 0px 2px 4px;
 }
 .info-item {
   background: #f5f2ff;
@@ -81,6 +82,7 @@ body {
   border-radius: 6px;
   background: #ffffff92;
   transition: 0.2s ease;
+  box-shadow: #66666657 0px 2px 4px;
 }
 #mute-button {
   padding: 6px 12px;
@@ -90,6 +92,14 @@ body {
   border-radius: 6px;
   background: #ffffff92;
   transition: 0.2s ease;
+  box-shadow: #66666657 0px 2px 4px;
+}
+#torque-preview {
+  background: rgba(0, 0, 0, 0.75);
+  color: white;
+  border-radius: 6px;
+  font-size: 12px;
+  pointer-events: none;
 }
 #next-weight {
   margin-left: auto;
@@ -99,6 +109,7 @@ body {
   font-weight: 600;
   font-size: 14px;
   backdrop-filter: blur(4px);
+  box-shadow: #66666657 0px 2px 4px;
 }
 #info-container {
   display: flex;
